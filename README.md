@@ -1,5 +1,8 @@
 # EFI SMBIOS Spoofer
 
+If you need assistance, don’t hesitate to create an issue:
+https://github.com/Acrozi/SmbiosChanger/issues
+
 A UEFI-based SMBIOS spoofer that modifies hardware identifiers at the firmware level before Windows boots. This ensures that spoofed values are visible to all software, including anti-cheat systems and hardware fingerprinting tools.
 
 ---
