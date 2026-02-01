@@ -1,6 +1,9 @@
 # EFI SMBIOS Spoofer
 
+This spoofer should work with all AMI motherboards. On laptops, spoofing may not always work. If you run into any issues, let me know!
+
 If you need assistance, don’t hesitate to create an issue:
+
 https://github.com/Acrozi/SmbiosChanger/issues
 
 A UEFI-based SMBIOS spoofer that modifies hardware identifiers at the firmware level before Windows boots. This ensures that spoofed values are visible to all software, including anti-cheat systems and hardware fingerprinting tools.
