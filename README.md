@@ -1,5 +1,8 @@
 # EFI SMBIOS Spoofer
 
+ToDo: 
+Make spoofer to work faster, can skip results clicking on some button.
+
 This spoofer should work with all AMI motherboards. On laptops, spoofing may not always work. If you run into any issues, let me know!
 
 If you need assistance, don’t hesitate to create an issue:
