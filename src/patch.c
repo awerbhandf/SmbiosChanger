@@ -5,8 +5,10 @@
 #include "smbios.h"
 #include "Config.h"
 #include <Library/UefiLib.h>
+#include <Library/UefiBootServicesTableLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/BaseLib.h>
+#include <Library/PrintLib.h>
 
 // Global spoofed values
 static UINT8 g_SpoofedUUID[16] = {0};
@@ -17,6 +19,72 @@ static CHAR16 g_BaseboardModel[64] = {0};
 static CHAR16 g_ProcessorSerial[64] = {0};
 
 extern VOID RandomText(CHAR8* s, INTN len);
+
+static UINTN
+DetectStatusColor(
+    IN CONST CHAR16* Format
+)
+{
+    if (Format == NULL || Format[0] != L'[') {
+        return EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK);
+    }
+
+    if ((Format[1] == L'W' && Format[2] == L'O' && Format[3] == L'R' && Format[4] == L'K') ||
+        (Format[1] == L'O' && Format[2] == L'K')) {
+        return EFI_TEXT_ATTR(EFI_LIGHTGREEN, EFI_BLACK);
+    }
+
+    if (Format[1] == L'W' && Format[2] == L'A' && Format[3] == L'R' && Format[4] == L'N') {
+        return EFI_TEXT_ATTR(EFI_YELLOW, EFI_BLACK);
+    }
+
+    if (Format[1] == L'F' && Format[2] == L'A' && Format[3] == L'I' && Format[4] == L'L') {
+        return EFI_TEXT_ATTR(EFI_LIGHTRED, EFI_BLACK);
+    }
+
+    return EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK);
+}
+
+static VOID
+PrintLog(
+    IN CONST CHAR16* Format,
+    ...
+)
+{
+    VA_LIST marker;
+    UINTN oldAttribute;
+    UINTN color;
+    BOOLEAN canSetColor;
+    CHAR16 lineBuffer[512];
+
+    if (Format != NULL && Format[0] == L'[') {
+        if ((Format[1] == L'W' && Format[2] == L'O' && Format[3] == L'R' && Format[4] == L'K') ||
+            (Format[1] == L'O' && Format[2] == L'K')) {
+            return;
+        }
+    }
+
+    canSetColor = (gST != NULL &&
+                   gST->ConOut != NULL &&
+                   gST->ConOut->SetAttribute != NULL &&
+                   gST->ConOut->Mode != NULL);
+
+    oldAttribute = canSetColor ? gST->ConOut->Mode->Attribute : EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK);
+    color = DetectStatusColor(Format);
+
+    if (canSetColor) {
+        gST->ConOut->SetAttribute(gST->ConOut, color);
+    }
+
+    VA_START(marker, Format);
+    UnicodeVSPrint(lineBuffer, sizeof(lineBuffer), Format, marker);
+    VA_END(marker);
+    Print(L"%s", lineBuffer);
+
+    if (canSetColor) {
+        gST->ConOut->SetAttribute(gST->ConOut, oldAttribute);
+    }
+}
 
 static VOID
 EditRandom(
@@ -71,18 +139,18 @@ PatchType1(
 )
 {
     if (entry == NULL) {
-        Print(L"[FAIL] Entry is NULL\n");
+        PrintLog(L"[FAIL] Entry is NULL\n");
         return;
     }
     
     SMBIOS_STRUCTURE_POINTER_CUSTOM table = FindTableByType(entry, SMBIOS_TYPE_SYSTEM_INFORMATION, 0);
     
     if (!table.Raw || !table.Type1) {
-        Print(L"[FAIL] Type 1 (System) table not found\n");
+        PrintLog(L"[FAIL] Type 1 (System) table not found\n");
         return;
     }
     
-    Print(L"[WORK] Patching Type 1 (System) at 0x%016lx...\n", (UINT64)(UINTN)table.Raw);
+    PrintLog(L"[WORK] Patching Type 1 (System) at 0x%016lx...\n", (UINT64)(UINTN)table.Raw);
 
     #if defined(SPOOF_SYSTEM_SERIAL) && SPOOF_SYSTEM_SERIAL
     if (g_SystemSerial[0] != 0) {
@@ -94,7 +162,7 @@ PatchType1(
     EditRandom(table, &table.Type1->SerialNumber);
     #endif
 
-    Print(L"[OK] Type 1 (System) patched successfully\n");
+    PrintLog(L"[OK] Type 1 (System) patched successfully\n");
 }
 
 VOID
@@ -103,18 +171,18 @@ PatchType2(
 )
 {
     if (entry == NULL) {
-        Print(L"[FAIL] Entry is NULL\n");
+        PrintLog(L"[FAIL] Entry is NULL\n");
         return;
     }
     
     SMBIOS_STRUCTURE_POINTER_CUSTOM table = FindTableByType(entry, SMBIOS_TYPE_BASEBOARD_INFORMATION, 0);
     
     if (!table.Raw || !table.Type2) {
-        Print(L"[FAIL] Type 2 (Baseboard) table not found\n");
+        PrintLog(L"[FAIL] Type 2 (Baseboard) table not found\n");
         return;
     }
     
-    Print(L"[WORK] Patching Type 2 (Baseboard) at 0x%016lx...\n", (UINT64)(UINTN)table.Raw);
+    PrintLog(L"[WORK] Patching Type 2 (Baseboard) at 0x%016lx...\n", (UINT64)(UINTN)table.Raw);
 
     #if defined(SPOOF_BASEBOARD_SERIAL) && SPOOF_BASEBOARD_SERIAL
     if (g_BaseboardSerial[0] != 0) {
@@ -134,7 +202,7 @@ PatchType2(
     }
     #endif
 
-    Print(L"[OK] Type 2 (Baseboard) patched successfully\n");
+    PrintLog(L"[OK] Type 2 (Baseboard) patched successfully\n");
 }
 
 VOID
@@ -143,34 +211,34 @@ PatchType4(
 )
 {
     if (entry == NULL) {
-        Print(L"[FAIL] Entry is NULL\n");
+        PrintLog(L"[FAIL] Entry is NULL\n");
         return;
     }
     
     SMBIOS_STRUCTURE_POINTER_CUSTOM table = FindTableByType(entry, SMBIOS_TYPE_PROCESSOR_INFORMATION, 0);
     
     if (!table.Raw || !table.Type4) {
-        Print(L"[WARN] Type 4 (Processor) table not found\n");
+        PrintLog(L"[WARN] Type 4 (Processor) table not found\n");
         return;
     }
     
-    Print(L"[WORK] Patching Type 4 (Processor) at 0x%016lx...\n", (UINT64)(UINTN)table.Raw);
+    PrintLog(L"[WORK] Patching Type 4 (Processor) at 0x%016lx...\n", (UINT64)(UINTN)table.Raw);
     
     #if defined(SPOOF_PROCESSOR_SERIAL) && SPOOF_PROCESSOR_SERIAL
     if (table.Type4->SerialNumber != 0) {
         if (g_ProcessorSerial[0] != 0) {
             EditCustomString(table, &table.Type4->SerialNumber, g_ProcessorSerial);
-            Print(L"[OK] Processor Serial Number spoofed: %s\n", g_ProcessorSerial);
+            PrintLog(L"[OK] Processor Serial Number spoofed: %s\n", g_ProcessorSerial);
         } else {
             EditRandom(table, &table.Type4->SerialNumber);
-            Print(L"[OK] Processor Serial Number randomized\n");
+            PrintLog(L"[OK] Processor Serial Number randomized\n");
         }
     } else {
-        Print(L"[WARN] Processor Serial Number field not available\n");
+        PrintLog(L"[WARN] Processor Serial Number field not available\n");
     }
     #endif
     
-    Print(L"[OK] Type 4 (Processor) patched successfully\n");
+    PrintLog(L"[OK] Type 4 (Processor) patched successfully\n");
 }
 
 VOID
@@ -179,15 +247,15 @@ PatchAll(
 )
 {
     if (entry == NULL) {
-        Print(L"[FAIL] Cannot patch - entry is NULL\n");
+        PrintLog(L"[FAIL] Cannot patch - entry is NULL\n");
         return;
     }
     
-    Print(L"[WORK] Starting patch sequence...\n");
+    PrintLog(L"[WORK] Starting patch sequence...\n");
     PatchType1(entry);
     PatchType2(entry);
     PatchType4(entry);
-    Print(L"[OK] Patch sequence completed\n");
+    PrintLog(L"[OK] Patch sequence completed\n");
 }
 
 VOID
@@ -274,4 +342,3 @@ GenerateAllSpoofedValues(
     }
     g_BaseboardModel[i] = 0;
 }
-

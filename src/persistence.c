@@ -203,6 +203,136 @@ AnalyzeSerialFormat(
     return 3; // Unknown
 }
 
+static BOOLEAN
+IsAsciiDigitChar(
+    IN CHAR16 Ch
+)
+{
+    return (BOOLEAN)(Ch >= L'0' && Ch <= L'9');
+}
+
+static BOOLEAN
+IsAsciiUpperChar(
+    IN CHAR16 Ch
+)
+{
+    return (BOOLEAN)(Ch >= L'A' && Ch <= L'Z');
+}
+
+static BOOLEAN
+IsAsciiLowerChar(
+    IN CHAR16 Ch
+)
+{
+    return (BOOLEAN)(Ch >= L'a' && Ch <= L'z');
+}
+
+static BOOLEAN
+IsAsciiLetterChar(
+    IN CHAR16 Ch
+)
+{
+    return (BOOLEAN)(IsAsciiUpperChar(Ch) || IsAsciiLowerChar(Ch));
+}
+
+static BOOLEAN
+IsAsciiAlphaNumChar(
+    IN CHAR16 Ch
+)
+{
+    return (BOOLEAN)(IsAsciiDigitChar(Ch) || IsAsciiLetterChar(Ch));
+}
+
+static CHAR16
+ToUpperAsciiChar(
+    IN CHAR16 Ch
+)
+{
+    if (Ch >= L'a' && Ch <= L'z') {
+        return (CHAR16)(Ch - (L'a' - L'A'));
+    }
+    return Ch;
+}
+
+static BOOLEAN
+IsHexChar(
+    IN CHAR16 Ch
+)
+{
+    CHAR16 upper = ToUpperAsciiChar(Ch);
+    return (BOOLEAN)(IsAsciiDigitChar(upper) || (upper >= L'A' && upper <= L'F'));
+}
+
+static BOOLEAN
+IsLikelyHexSerial(
+    IN CONST CHAR16* OriginalSerial
+)
+{
+    UINTN i;
+    UINTN hexCount = 0;
+    UINTN alphaNumCount = 0;
+
+    if (OriginalSerial == NULL || OriginalSerial[0] == 0) {
+        return FALSE;
+    }
+
+    for (i = 0; OriginalSerial[i] != 0; i++) {
+        CHAR16 ch = OriginalSerial[i];
+        if (!IsAsciiAlphaNumChar(ch)) {
+            continue;
+        }
+        alphaNumCount++;
+        if (IsHexChar(ch)) {
+            hexCount++;
+        }
+    }
+
+    if (alphaNumCount < 8) {
+        return FALSE;
+    }
+    return (BOOLEAN)(hexCount == alphaNumCount);
+}
+
+static CHAR16
+PickFromCharset(
+    IN OUT UINT32* Seed,
+    IN CONST CHAR16* Charset,
+    IN UINTN CharsetSize
+)
+{
+    *Seed = *Seed * 1103515245 + 12345;
+    return Charset[((*Seed >> 16) & 0x7FFF) % CharsetSize];
+}
+
+static VOID
+GenerateFallbackSerial(
+    OUT CHAR16* Serial,
+    IN UINTN MaxLength,
+    IN UINTN SerialLength,
+    IN OUT UINT32* Seed
+)
+{
+    UINTN i;
+    UINTN written = 0;
+    CHAR16 prefix[] = L"SN-";
+    CHAR16 alphaNum[] = L"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    UINTN alphaNumSize = 32;
+
+    for (i = 0; i < 3 && written < SerialLength && written < MaxLength - 1; i++) {
+        Serial[written++] = prefix[i];
+    }
+
+    while (written < SerialLength && written < MaxLength - 1) {
+        if (written > 3 && ((written - 3) % 5) == 0 && written + 1 < SerialLength) {
+            Serial[written++] = L'-';
+            continue;
+        }
+        Serial[written++] = PickFromCharset(Seed, alphaNum, alphaNumSize);
+    }
+
+    Serial[written] = 0;
+}
+
 /**
  * Generate Random Serial matching original format
  */
@@ -269,6 +399,8 @@ EfiGenerateRandomSerialMatchingFormat(
     UINT8 format = AnalyzeSerialFormat(OriginalSerial);
     UINTN originalLength = 0;
     UINTN serialLength = 14; // Default
+    BOOLEAN useOriginalPattern = FALSE;
+    BOOLEAN isHexPattern = FALSE;
     
     if (Serial == NULL || MaxLength < 16) {
         return;
@@ -284,6 +416,8 @@ EfiGenerateRandomSerialMatchingFormat(
             format = 3; // Reset to unknown format
         } else if (originalLength > 0 && originalLength < MaxLength) {
             serialLength = originalLength; // Match original length EXACTLY
+            useOriginalPattern = TRUE;
+            isHexPattern = IsLikelyHexSerial(OriginalSerial);
         }
     }
     
@@ -311,107 +445,101 @@ EfiGenerateRandomSerialMatchingFormat(
         counter++;
         seed = counter * 0x12345678;
     }
-    
-    // Generate based on format
+
+    // Best quality: mirror exact character classes and separators from original.
+    if (useOriginalPattern && OriginalSerial != NULL) {
+        CHAR16 digits[] = L"0123456789";
+        CHAR16 digitsNoZero[] = L"123456789";
+        CHAR16 upperLetters[] = L"ABCDEFGHJKLMNPQRSTUVWXYZ";
+        CHAR16 lowerLetters[] = L"abcdefghjkmnpqrstuvwxyz";
+        CHAR16 hexUpper[] = L"0123456789ABCDEF";
+        UINTN digitsSize = 10;
+        UINTN digitsNoZeroSize = 9;
+        UINTN upperLettersSize = 24;
+        UINTN lowerLettersSize = 24;
+        UINTN hexUpperSize = 16;
+        BOOLEAN changed = FALSE;
+        UINTN firstMutable = (UINTN)-1;
+
+        for (i = 0; i < serialLength && i < MaxLength - 1; i++) {
+            CHAR16 ch = OriginalSerial[i];
+
+            if (IsAsciiDigitChar(ch)) {
+                if (firstMutable == (UINTN)-1) {
+                    firstMutable = i;
+                }
+                if (i == 0 && ch != L'0') {
+                    Serial[i] = PickFromCharset(&seed, digitsNoZero, digitsNoZeroSize);
+                } else {
+                    Serial[i] = PickFromCharset(&seed, digits, digitsSize);
+                }
+            } else if (IsAsciiUpperChar(ch)) {
+                if (firstMutable == (UINTN)-1) {
+                    firstMutable = i;
+                }
+                if (isHexPattern && IsHexChar(ch)) {
+                    Serial[i] = PickFromCharset(&seed, hexUpper, hexUpperSize);
+                } else {
+                    Serial[i] = PickFromCharset(&seed, upperLetters, upperLettersSize);
+                }
+            } else if (IsAsciiLowerChar(ch)) {
+                if (firstMutable == (UINTN)-1) {
+                    firstMutable = i;
+                }
+                Serial[i] = PickFromCharset(&seed, lowerLetters, lowerLettersSize);
+            } else {
+                // Keep separators/symbols to preserve realistic vendor formatting.
+                Serial[i] = ch;
+            }
+
+            if (Serial[i] != ch && IsAsciiAlphaNumChar(ch)) {
+                changed = TRUE;
+            }
+        }
+        Serial[i] = 0;
+
+        // Avoid returning identical value to original by forcing one mutable char change.
+        if (!changed && firstMutable != (UINTN)-1) {
+            CHAR16 original = OriginalSerial[firstMutable];
+            if (IsAsciiDigitChar(original)) {
+                Serial[firstMutable] = (original == L'9') ? L'8' : (CHAR16)(original + 1);
+            } else if (IsAsciiUpperChar(original)) {
+                Serial[firstMutable] = (original == L'Z') ? L'Y' : (CHAR16)(original + 1);
+            } else if (IsAsciiLowerChar(original)) {
+                Serial[firstMutable] = (original == L'z') ? L'y' : (CHAR16)(original + 1);
+            }
+        }
+        return;
+    }
+
+    // Fallback for empty/placeholder/unknown values.
     if (format == 0) {
-        // Digits only (1-9 for first char, 0-9 for rest to avoid leading zero)
         CHAR16 digitsFirst[] = L"123456789";
         CHAR16 digitsAll[] = L"0123456789";
         UINTN digitsFirstSize = 9;
         UINTN digitsAllSize = 10;
         for (i = 0; i < serialLength && i < MaxLength - 1; i++) {
-            seed = seed * 1103515245 + 12345;
             if (i == 0) {
-                // First character: no leading zero
-                Serial[i] = digitsFirst[((seed >> 16) & 0x7FFF) % digitsFirstSize];
+                Serial[i] = PickFromCharset(&seed, digitsFirst, digitsFirstSize);
             } else {
-                // Rest: can include zero
-                Serial[i] = digitsAll[((seed >> 16) & 0x7FFF) % digitsAllSize];
+                Serial[i] = PickFromCharset(&seed, digitsAll, digitsAllSize);
             }
         }
-    } else if (format == 1) {
-        // Letters only (A-Z)
-        CHAR16 letters[] = L"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        UINTN lettersSize = 26;
-        for (i = 0; i < serialLength && i < MaxLength - 1; i++) {
-            seed = seed * 1103515245 + 12345;
-            Serial[i] = letters[((seed >> 16) & 0x7FFF) % lettersSize];
-        }
-    } else if (format == 2) {
-        // Mixed format - analyze pattern from original to match position pattern
-        // Example: "A438S02701" = Letter, Digits, Letter, Digits
-        BOOLEAN* positionIsLetter = NULL;
-        UINTN digitCount = 0;
-        UINTN letterCount = 0;
-        
-        // Allocate array to track position pattern (if original exists)
-        if (OriginalSerial != NULL && originalLength > 0 && originalLength <= 64 && gBS != NULL) {
-            EFI_STATUS allocStatus = gBS->AllocatePool(EfiBootServicesData, originalLength * sizeof(BOOLEAN), (VOID**)&positionIsLetter);
-            if (!EFI_ERROR(allocStatus) && positionIsLetter != NULL) {
-                for (i = 0; i < originalLength; i++) {
-                    if (OriginalSerial[i] >= L'0' && OriginalSerial[i] <= L'9') {
-                        positionIsLetter[i] = FALSE;
-                        digitCount++;
-                    } else if ((OriginalSerial[i] >= L'A' && OriginalSerial[i] <= L'Z') ||
-                              (OriginalSerial[i] >= L'a' && OriginalSerial[i] <= L'z')) {
-                        positionIsLetter[i] = TRUE;
-                        letterCount++;
-                    } else {
-                        // Unknown character - use random
-                        positionIsLetter[i] = ((seed >> (i & 0xF)) & 1) ? TRUE : FALSE;
-                    }
-                }
-            }
-        }
-        
-        CHAR16 digits[] = L"0123456789";
-        CHAR16 letters[] = L"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        UINTN digitsSize = 10;
-        UINTN lettersSize = 26;
-        
-        for (i = 0; i < serialLength && i < MaxLength - 1; i++) {
-            seed = seed * 1103515245 + 12345;
-            
-            // If we have position pattern, match it; otherwise use ratio
-            BOOLEAN shouldBeLetter = FALSE;
-            if (positionIsLetter != NULL && i < originalLength) {
-                shouldBeLetter = positionIsLetter[i];
-            } else {
-                // Use ratio based on original if available, otherwise 50/50
-                UINTN ratio = (digitCount > letterCount && originalLength > 0) ? 60 : 50;
-                shouldBeLetter = (((seed >> 16) & 0x7FFF) % 100 >= ratio);
-            }
-            
-            if (shouldBeLetter) {
-                // Generate letter
-                Serial[i] = letters[((seed >> 8) & 0x7F) % lettersSize];
-            } else {
-                // Generate digit
-                if (i == 0) {
-                    // First char: avoid leading zero
-                    CHAR16 digitsFirst[] = L"123456789";
-                    Serial[i] = digitsFirst[((seed >> 8) & 0x7F) % 9];
-                } else {
-                    Serial[i] = digits[((seed >> 8) & 0x7F) % digitsSize];
-                }
-            }
-        }
-        
-        // Free allocated memory
-        if (positionIsLetter != NULL && gBS != NULL) {
-            gBS->FreePool(positionIsLetter);
-        }
-    } else {
-        // Unknown format - use default charset (mixed)
-        CHAR16 charset[] = L"123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        UINTN charsetSize = 35;
-        for (i = 0; i < serialLength && i < MaxLength - 1; i++) {
-            seed = seed * 1103515245 + 12345;
-            Serial[i] = charset[((seed >> 16) & 0x7FFF) % charsetSize];
-        }
+        Serial[i] = 0;
+        return;
     }
-    
-    Serial[i] = 0;
+
+    if (format == 1) {
+        CHAR16 letters[] = L"ABCDEFGHJKLMNPQRSTUVWXYZ";
+        UINTN lettersSize = 24;
+        for (i = 0; i < serialLength && i < MaxLength - 1; i++) {
+            Serial[i] = PickFromCharset(&seed, letters, lettersSize);
+        }
+        Serial[i] = 0;
+        return;
+    }
+
+    GenerateFallbackSerial(Serial, MaxLength, serialLength, &seed);
 }
 
 /**
@@ -752,7 +880,7 @@ EfiLoadSpoofFromDisk(
     
     if (UUID == NULL || SystemSerial == NULL || BiosSerial == NULL || 
         BaseboardSerial == NULL || BaseboardModel == NULL || ProcessorSerial == NULL ||
-        gST == NULL || gST->BootServices == NULL) {
+        gST == NULL || gST->BootServices == NULL || gBS == NULL) {
         return EFI_INVALID_PARAMETER;
     }
     
@@ -771,6 +899,9 @@ EfiLoadSpoofFromDisk(
     
     // Try each filesystem - prioritize ones with EFI folder (system EFI partition)
     for (i = 0; i < HandleCount; i++) {
+        Root = NULL;
+        File = NULL;
+
         status = gBS->HandleProtocol(
             HandleBuffer[i],
             &gEfiSimpleFileSystemProtocolGuid,
@@ -813,7 +944,7 @@ EfiLoadSpoofFromDisk(
             status = File->Read(File, &FileSize, &config);
             
             File->Close(File);
-            Root->Close(Root);
+            File = NULL;
             
             if (!EFI_ERROR(status) && FileSize >= sizeof(NVRAM_SPOOF_CONFIG)) {
                 // Verify magic and version
@@ -841,6 +972,9 @@ EfiLoadSpoofFromDisk(
                         }
                         
                         if (IsSystemEfi) {
+                            if (Root != NULL) {
+                                Root->Close(Root);
+                            }
                             gBS->FreePool(HandleBuffer);
                             return EFI_SUCCESS;
                         }
@@ -890,7 +1024,7 @@ EfiSaveSpoofToDisk(
     
     if (UUID == NULL || SystemSerial == NULL || BiosSerial == NULL || 
         BaseboardSerial == NULL || BaseboardModel == NULL || ProcessorSerial == NULL ||
-        gST == NULL || gST->BootServices == NULL) {
+        gST == NULL || gST->BootServices == NULL || gBS == NULL) {
         return EFI_INVALID_PARAMETER;
     }
     
@@ -909,6 +1043,10 @@ EfiSaveSpoofToDisk(
     
     // Try each filesystem - prioritize system EFI partition (has EFI folder)
     for (i = 0; i < HandleCount; i++) {
+        Root = NULL;
+        File = NULL;
+        Dir = NULL;
+
         status = gBS->HandleProtocol(
             HandleBuffer[i],
             &gEfiSimpleFileSystemProtocolGuid,
@@ -936,6 +1074,7 @@ EfiSaveSpoofToDisk(
         // Only try to save to system EFI partition
         if (!IsSystemEfi) {
             Root->Close(Root);
+            Root = NULL;
             continue;
         }
         
@@ -947,6 +1086,7 @@ EfiSaveSpoofToDisk(
         }
         if (!EFI_ERROR(status) && Dir != NULL) {
             Dir->Close(Dir);
+            Dir = NULL;
         }
         
         // Try to open/create UUID file
@@ -983,9 +1123,12 @@ EfiSaveSpoofToDisk(
             }
             
             File->Close(File);
-            Root->Close(Root);
+            File = NULL;
             
             if (!EFI_ERROR(status)) {
+                if (Root != NULL) {
+                    Root->Close(Root);
+                }
                 gBS->FreePool(HandleBuffer);
                 return EFI_SUCCESS;
             }
@@ -1005,4 +1148,3 @@ EfiSaveSpoofToDisk(
     return EFI_UNSUPPORTED;
     #endif
 }
-

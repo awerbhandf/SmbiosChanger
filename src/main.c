@@ -8,41 +8,367 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/BaseMemoryLib.h>
+#include <Library/PrintLib.h>
 #include <Protocol/Smbios.h>
 #include "smbios.h"
 #include "Config.h"
+
+static BOOLEAN g_SkipVerboseOutput = FALSE;
+#define UI_COLOR_DEFAULT EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK)
+#define UI_COLOR_HEADER EFI_TEXT_ATTR(EFI_LIGHTGREEN, EFI_LIGHTGRAY)
+#define UI_COLOR_IMPORTANT EFI_TEXT_ATTR(EFI_YELLOW, EFI_BLACK)
+#define UI_COLOR_ACCENT EFI_TEXT_ATTR(EFI_CYAN, EFI_BLACK)
+#define UI_COOLDOWN_SCALE_NUM 2
+#define UI_COOLDOWN_SCALE_DEN 1
+
+typedef enum {
+    STEP_ACTIVE = 0,
+    STEP_DONE,
+    STEP_FAIL
+} UI_STEP_STATE;
+
+static VOID
+PollSkipKey(
+    VOID
+)
+{
+    EFI_STATUS keyStatus;
+    EFI_INPUT_KEY key;
+
+    if (g_SkipVerboseOutput || gST == NULL || gST->ConIn == NULL) {
+        return;
+    }
+
+    while (TRUE) {
+        keyStatus = gST->ConIn->ReadKeyStroke(gST->ConIn, &key);
+        if (EFI_ERROR(keyStatus)) {
+            break;
+        }
+
+        if (key.UnicodeChar == L'S' || key.UnicodeChar == L's') {
+            g_SkipVerboseOutput = TRUE;
+            Print(L"\n");
+            Print(L"+==============================================================+\n");
+            Print(L"|                    SKIP MODE ENABLED                         |\n");
+            Print(L"+==============================================================+\n");
+            Print(L"| Detailed output and cooldown delays are now skipped.         |\n");
+            Print(L"| SMBIOS spoofing still runs normally in the background.       |\n");
+            Print(L"| You only skip visual logs, not the spoofing process itself.  |\n");
+            Print(L"+==============================================================+\n");
+            break;
+        }
+    }
+}
+
+static VOID
+SetConsoleColor(
+    IN UINTN Color
+)
+{
+    if (gST != NULL && gST->ConOut != NULL && gST->ConOut->SetAttribute != NULL) {
+        gST->ConOut->SetAttribute(gST->ConOut, Color);
+    }
+}
+
+static VOID
+PrintFooterHints(
+    VOID
+)
+{
+    SetConsoleColor(UI_COLOR_HEADER);
+    Print(L" [S] Skip Details   [R] Regenerate Values   [Enter] Continue Boot ");
+    SetConsoleColor(UI_COLOR_DEFAULT);
+    Print(L"\n");
+}
+
+static VOID
+PrintSkipInfoCard(
+    VOID
+)
+{
+    if (g_SkipVerboseOutput) {
+        return;
+    }
+
+    SetConsoleColor(UI_COLOR_ACCENT);
+    Print(L"+==============================================================+\n");
+    Print(L"| QUICK TIP                                                    |\n");
+    Print(L"+==============================================================+\n");
+    SetConsoleColor(UI_COLOR_DEFAULT);
+    Print(L"  Press [");
+    SetConsoleColor(UI_COLOR_IMPORTANT);
+    Print(L"S");
+    SetConsoleColor(UI_COLOR_DEFAULT);
+    Print(L"] to skip logs + delays. Spoofing still runs normally.\n");
+    Print(L"\n");
+}
+
+static VOID
+PrintBanner(
+    VOID
+)
+{
+    SetConsoleColor(UI_COLOR_HEADER);
+    Print(L"                                                                \n");
+    Print(L"                        SMBIOS SPOOFER                          \n");
+    Print(L"                         V3 | ACROZI                            \n");
+    Print(L"                                                                \n");
+    SetConsoleColor(UI_COLOR_DEFAULT);
+    Print(L" Clean SMBIOS spoofing with persistence and fast reset flow.\n");
+    Print(L" Spoofer: EFI SMBIOS SPOOFER V3\n");
+    SetConsoleColor(UI_COLOR_IMPORTANT);
+    Print(L" Give repo a star: github.com/Acrozi\n");
+    SetConsoleColor(UI_COLOR_DEFAULT);
+    Print(L"---------------------------------------------------------------\n");
+    PrintFooterHints();
+}
+
+static VOID
+PrintStep(
+    IN UINTN Step,
+    IN UINTN Total,
+    IN CONST CHAR16* Title,
+    IN UI_STEP_STATE State
+)
+{
+    CONST CHAR16* stateText = L"ACTIVE";
+    UINTN stateColor = UI_COLOR_DEFAULT;
+
+    PollSkipKey();
+    if (g_SkipVerboseOutput) {
+        return;
+    }
+
+    if (State == STEP_DONE) {
+        stateText = L"DONE";
+        stateColor = UI_COLOR_ACCENT;
+    } else if (State == STEP_FAIL) {
+        stateText = L"FAIL";
+        stateColor = UI_COLOR_IMPORTANT;
+    }
+
+    SetConsoleColor(UI_COLOR_DEFAULT);
+    Print(L"[STEP %d/%d] %-30s ", Step, Total, Title);
+    SetConsoleColor(stateColor);
+    Print(L"[%s]\n", stateText);
+    SetConsoleColor(UI_COLOR_DEFAULT);
+}
+
+static UINTN
+DetectStatusColor(
+    IN CONST CHAR16* Format
+)
+{
+    if (Format == NULL || Format[0] != L'[') {
+        return UI_COLOR_DEFAULT;
+    }
+
+    if ((Format[1] == L'W' && Format[2] == L'O' && Format[3] == L'R' && Format[4] == L'K') ||
+        (Format[1] == L'O' && Format[2] == L'K') ||
+        (Format[1] == L'R' && Format[2] == L'E' && Format[3] == L'S' && Format[4] == L'E' && Format[5] == L'T') ||
+        (Format[1] == L'S' && Format[2] == L'K' && Format[3] == L'I' && Format[4] == L'P')) {
+        return UI_COLOR_ACCENT;
+    }
+
+    if (Format[1] == L'W' && Format[2] == L'A' && Format[3] == L'R' && Format[4] == L'N') {
+        return UI_COLOR_IMPORTANT;
+    }
+
+    if (Format[1] == L'F' && Format[2] == L'A' && Format[3] == L'I' && Format[4] == L'L') {
+        return UI_COLOR_IMPORTANT;
+    }
+
+    if ((Format[1] == L'I' && Format[2] == L'N' && Format[3] == L'F' && Format[4] == L'O') ||
+        (Format[1] == L'U' && Format[2] == L'U' && Format[3] == L'I' && Format[4] == L'D') ||
+        (Format[1] == L'N' && Format[2] == L'V' && Format[3] == L'R' && Format[4] == L'A' && Format[5] == L'M') ||
+        (Format[1] == L'D' && Format[2] == L'I' && Format[3] == L'S' && Format[4] == L'K')) {
+        return UI_COLOR_ACCENT;
+    }
+
+    return UI_COLOR_DEFAULT;
+}
+
+static VOID
+PrintVerbose(
+    IN CONST CHAR16* Format,
+    ...
+)
+{
+    VA_LIST marker;
+    UINTN color;
+    CHAR16 lineBuffer[512];
+
+    PollSkipKey();
+    if (g_SkipVerboseOutput) {
+        return;
+    }
+
+    color = DetectStatusColor(Format);
+    if (gST != NULL && gST->ConOut != NULL && gST->ConOut->SetAttribute != NULL) {
+        gST->ConOut->SetAttribute(gST->ConOut, color);
+    }
+
+    VA_START(marker, Format);
+    UnicodeVSPrint(lineBuffer, sizeof(lineBuffer), Format, marker);
+    VA_END(marker);
+    Print(L"%s", lineBuffer);
+
+    if (gST != NULL && gST->ConOut != NULL && gST->ConOut->SetAttribute != NULL) {
+        gST->ConOut->SetAttribute(gST->ConOut, UI_COLOR_DEFAULT);
+    }
+}
+
+static VOID
+PrintSection(
+    IN CONST CHAR16* Title
+)
+{
+    if (g_SkipVerboseOutput) {
+        return;
+    }
+
+    PollSkipKey();
+    if (g_SkipVerboseOutput) {
+        return;
+    }
+
+    Print(L"\n");
+    SetConsoleColor(UI_COLOR_ACCENT);
+    Print(L"+======================================+\n");
+    Print(L"| %-36s |\n", Title);
+    Print(L"+======================================+\n");
+    SetConsoleColor(UI_COLOR_DEFAULT);
+}
+
+static VOID
+FormatUUIDToString(
+    IN UINT8* UUID,
+    OUT CHAR16* Buffer,
+    IN UINTN BufferChars
+)
+{
+    if (Buffer == NULL || BufferChars == 0) {
+        return;
+    }
+
+    if (UUID == NULL) {
+        UnicodeSPrint(Buffer, BufferChars * sizeof(CHAR16), L"NULL");
+        return;
+    }
+
+    UnicodeSPrint(
+        Buffer,
+        BufferChars * sizeof(CHAR16),
+        L"%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X",
+        UUID[0], UUID[1], UUID[2], UUID[3],
+        UUID[4], UUID[5], UUID[6], UUID[7],
+        UUID[8], UUID[9], UUID[10], UUID[11], UUID[12], UUID[13], UUID[14], UUID[15]
+    );
+}
+
+static CONST CHAR16*
+ValueOrDash(
+    IN CONST CHAR16* Value
+)
+{
+    if (Value == NULL || Value[0] == 0) {
+        return L"-";
+    }
+
+    if (StrCmp(Value, L"<null string>") == 0) {
+        return L"-";
+    }
+
+    return Value;
+}
 
 static VOID
 Delay(
     IN UINTN Microseconds
 )
 {
-    if (gBS != NULL && gBS->Stall != NULL) {
-        gBS->Stall(Microseconds);
+    UINTN chunk;
+
+    if (gBS == NULL || gBS->Stall == NULL) {
+        return;
+    }
+
+    if (g_SkipVerboseOutput) {
+        return;
+    }
+
+    Microseconds = (Microseconds * UI_COOLDOWN_SCALE_NUM) / UI_COOLDOWN_SCALE_DEN;
+
+    while (Microseconds > 0 && !g_SkipVerboseOutput) {
+        chunk = (Microseconds > 50000) ? 50000 : Microseconds;
+        gBS->Stall(chunk);
+        Microseconds -= chunk;
+        PollSkipKey();
     }
 }
 
+static VOID
+AnimateProgress(
+    IN CONST CHAR16* Label,
+    IN UINTN Microseconds
+)
+{
+    CONST CHAR16* frames[4] = { L"|", L"/", L"-", L"\\" };
+    UINTN frameIndex = 0;
+    UINTN chunk;
+    UINTN remaining = Microseconds;
+
+    if (gBS == NULL || gBS->Stall == NULL || g_SkipVerboseOutput) {
+        return;
+    }
+
+    remaining = (remaining * UI_COOLDOWN_SCALE_NUM) / UI_COOLDOWN_SCALE_DEN;
+
+    while (remaining > 0 && !g_SkipVerboseOutput) {
+        chunk = (remaining > 120000) ? 120000 : remaining;
+        SetConsoleColor(UI_COLOR_DEFAULT);
+        Print(L"\r[%s] %s...   ", frames[frameIndex], Label);
+        frameIndex = (frameIndex + 1) & 3;
+        gBS->Stall(chunk);
+        remaining -= chunk;
+        PollSkipKey();
+    }
+
+    if (!g_SkipVerboseOutput) {
+        Print(L"\r                                                          \r");
+        SetConsoleColor(UI_COLOR_DEFAULT);
+    }
+}
+
+static VOID
+WaitForEnterKey(
+    VOID
+)
+{
+    EFI_STATUS keyStatus;
+    EFI_INPUT_KEY key;
+    UINTN index;
+
+    if (gST == NULL || gST->ConIn == NULL || gBS == NULL) {
+        return;
+    }
+
+    while (TRUE) {
+        gBS->WaitForEvent(1, &gST->ConIn->WaitForKey, &index);
+        keyStatus = gST->ConIn->ReadKeyStroke(gST->ConIn, &key);
+        if (EFI_ERROR(keyStatus)) {
+            continue;
+        }
+
+        if (key.UnicodeChar == CHAR_CARRIAGE_RETURN) {
+            break;
+        }
+    }
+}
 
 extern VOID SetSpoofedUUID(UINT8* UUID);
 extern VOID SetSpoofedSerials(CHAR16* SystemSerial, CHAR16* BiosSerial, CHAR16* BaseboardSerial, CHAR16* BaseboardModel, CHAR16* ProcessorSerial);
 extern VOID PatchAll(SMBIOS_STRUCTURE_TABLE* entry);
-
-static VOID
-PrintUUID(
-    IN UINT8* UUID
-)
-{
-    if (UUID == NULL) {
-        Print(L"NULL");
-        return;
-    }
-    
-    Print(L"%02X%02X%02X%02X-", UUID[0], UUID[1], UUID[2], UUID[3]);
-    Print(L"%02X%02X-", UUID[4], UUID[5]);
-    Print(L"%02X%02X-", UUID[6], UUID[7]);
-    Print(L"%02X%02X-", UUID[8], UUID[9]);
-    Print(L"%02X%02X%02X%02X%02X%02X", UUID[10], UUID[11], UUID[12], UUID[13], UUID[14], UUID[15]);
-}
 
 EFI_STATUS
 EFIAPI
@@ -61,10 +387,12 @@ UefiMain(
     CHAR16 baseboardModel[64];
     CHAR16 processorSerial[64];
     BOOLEAN loadedFromStorage = FALSE;
+    BOOLEAN patchApplied = FALSE;
     
     if (gST == NULL || gST->ConOut == NULL) {
         return EFI_INVALID_PARAMETER;
     }
+
     ZeroMem(uuid, sizeof(uuid));
     ZeroMem(systemSerial, sizeof(systemSerial));
     ZeroMem(biosSerial, sizeof(biosSerial));
@@ -74,45 +402,39 @@ UefiMain(
     
     gST->ConOut->ClearScreen(gST->ConOut);
     
-    Print(L"\n");
-    Print(L"========================================\n");
-    Print(L"  EFI SMBIOS Spoofer V2\n");
-    Print(L"  Developed by Acrozi\n");
-    Print(L"  https://github.com/Acrozi\n");
-    Print(L"========================================\n");
-    Print(L"\n");
-    
-    Print(L"[WORK] Searching for SMBIOS table entry...\n");
-    Delay(500000);
+    PrintBanner();
+    PrintSkipInfoCard();
+    Delay(3000000);
+
+    PrintStep(1, 6, L"Discover SMBIOS tables", STEP_ACTIVE);
+    AnimateProgress(L"Searching SMBIOS entry", 500000);
     smbiosEntry = FindEntry();
     if (!smbiosEntry) {
+        PrintStep(1, 6, L"Discover SMBIOS tables", STEP_FAIL);
         Print(L"[FAIL] Failed to locate SMBIOS table entry\n");
         Print(L"[FAIL] Trying alternative methods...\n");
         Print(L"\n");
         Print(L"Press Enter to continue booting...\n");
-        if (gST != NULL && gST->ConIn != NULL) {
-            gST->ConIn->ReadKeyStroke(gST->ConIn, NULL);
-        }
+        WaitForEnterKey();
         return EFI_NOT_FOUND;
     }
+    PrintStep(1, 6, L"Discover SMBIOS tables", STEP_DONE);
+    Delay(250000);
     
-    Print(L"[INFO] SMBIOS table entry found on 0x%016lx\n", (UINT64)smbiosEntry->StructureTableAddress);
-    Delay(500000);
+    AnimateProgress(L"Checking SMBIOS protocol", 400000);
     
     status = gBS->LocateProtocol(&gEfiSmbiosProtocolGuid, NULL, (VOID**)&smbiosProtocol);
     if (EFI_ERROR(status)) {
-        Print(L"[WARN] Could not locate SMBIOS protocol (UUID spoofing disabled)\n");
-        Delay(500000);
+        PrintVerbose(L"[WARN ] Could not locate SMBIOS protocol (UUID spoofing disabled)\n");
+        Delay(200000);
         smbiosProtocol = NULL;
-    } else {
-        Delay(500000);
     }
     
+    PrintStep(2, 6, L"Load stored profile", STEP_ACTIVE);
     #if defined(USE_NVRAM_PERSISTENCE) && USE_NVRAM_PERSISTENCE
     status = EfiLoadSpoofFromNvram(uuid, systemSerial, biosSerial, baseboardSerial, baseboardModel, processorSerial);
     if (!EFI_ERROR(status)) {
-        Print(L"[NVRAM] Successfully loaded spoofed values from NVRAM\n");
-        Delay(500000);
+        AnimateProgress(L"Loading NVRAM profile", 400000);
         loadedFromStorage = TRUE;
     }
     #endif
@@ -121,12 +443,13 @@ UefiMain(
         #if defined(USE_DISK_PERSISTENCE) && USE_DISK_PERSISTENCE
         status = EfiLoadSpoofFromDisk(uuid, systemSerial, biosSerial, baseboardSerial, baseboardModel, processorSerial);
         if (!EFI_ERROR(status)) {
-            Print(L"[DISK] Successfully loaded spoofed values from disk\n");
-            Delay(500000);
+            AnimateProgress(L"Loading disk profile", 400000);
             loadedFromStorage = TRUE;
         }
         #endif
     }
+    PrintStep(2, 6, L"Load stored profile", STEP_DONE);
+    Delay(250000);
     
     CHAR16 originalSystemSerial[64];
     CHAR16 originalBiosSerial[64];
@@ -149,11 +472,6 @@ UefiMain(
             
             if (table1.Type1->SerialNumber != 0) {
                 ReadSmbiosString(table1, table1.Type1->SerialNumber, originalSystemSerial, 64);
-                if (StrStr(originalSystemSerial, L"DEFAULT") != NULL || 
-                    StrStr(originalSystemSerial, L"Default") != NULL ||
-                    StrStr(originalSystemSerial, L"To be filled") != NULL) {
-                    Print(L"[INFO] System Serial is a placeholder - will use default format\n");
-                }
             }
         }
         
@@ -174,17 +492,12 @@ UefiMain(
         SMBIOS_STRUCTURE_POINTER_CUSTOM table4 = FindTableByType(smbiosEntry, SMBIOS_TYPE_PROCESSOR_INFORMATION, 0);
         if (table4.Raw != NULL && table4.Type4 != NULL && table4.Type4->SerialNumber != 0) {
             ReadSmbiosString(table4, table4.Type4->SerialNumber, originalProcessorSerial, 64);
-            if (StrStr(originalProcessorSerial, L"DEFAULT") != NULL || 
-                StrStr(originalProcessorSerial, L"Default") != NULL ||
-                StrStr(originalProcessorSerial, L"To be filled") != NULL) {
-                Print(L"[INFO] Processor Serial is a placeholder - will use default format\n");
-            }
         }
     }
     
+    PrintStep(3, 6, L"Prepare spoof values", STEP_ACTIVE);
     if (!loadedFromStorage) {
-        Print(L"[UUID] Generating new UUID and serials...\n");
-        Delay(500000);
+        AnimateProgress(L"Generating spoof values", 500000);
         EfiGenerateRandomUUID(uuid);
         
         EfiGenerateRandomSerialMatchingFormat(systemSerial, 64, originalSystemSerial);
@@ -200,136 +513,88 @@ UefiMain(
     } else {
         biosSerial[0] = 0;
     }
-    Delay(500000);
+    PrintStep(3, 6, L"Prepare spoof values", STEP_DONE);
+    Delay(300000);
     
     SetSpoofedUUID(uuid);
     SetSpoofedSerials(systemSerial, biosSerial, baseboardSerial, NULL, processorSerial);
     
-    Print(L"\n");
-    Print(L"========================================\n");
-    Print(L"  Applying SMBIOS Spoofs\n");
-    Print(L"========================================\n");
+    PrintStep(4, 6, L"Patch SMBIOS tables", STEP_ACTIVE);
+    PrintSection(L"APPLYING SMBIOS SPOOFS");
     
     if (smbiosEntry != NULL) {
         PatchAll(smbiosEntry);
+        patchApplied = TRUE;
     } else {
+        PrintStep(4, 6, L"Patch SMBIOS tables", STEP_FAIL);
         Print(L"[FAIL] Cannot patch - entry is NULL\n");
     }
-    
-    Print(L"========================================\n");
-    Print(L"  SMBIOS Spoofing Completed\n");
-    Print(L"========================================\n");
-    Delay(500000);
-    
-    if (smbiosProtocol != NULL && SPOOF_SYSTEM_INFO) {
-        Print(L"[UUID] Modifying UUID via SMBIOS Protocol...\n");
-        Delay(500000);
-        status = EfiModifySmbiosType1UUID(smbiosProtocol, uuid);
-        if (!EFI_ERROR(status)) {
-            Print(L"[UUID] UUID modified successfully\n");
-            Delay(500000);
-        } else {
-            Print(L"[UUID] UUID modification failed (status: %r)\n", status);
-            Delay(500000);
-        }
+    if (patchApplied) {
+        PrintStep(4, 6, L"Patch SMBIOS tables", STEP_DONE);
+        Delay(300000);
     }
     
+    PrintSection(L"SMBIOS SPOOFING COMPLETED");
+    Delay(200000);
+    
+    if (smbiosProtocol != NULL && SPOOF_SYSTEM_INFO) {
+        AnimateProgress(L"Applying UUID via protocol", 500000);
+        status = EfiModifySmbiosType1UUID(smbiosProtocol, uuid);
+        if (EFI_ERROR(status)) {
+            PrintVerbose(L"[UUID ] UUID modification failed (status: %r)\n", status);
+        }
+        Delay(200000);
+    }
+    
+    PrintStep(5, 6, L"Persist spoof profile", STEP_ACTIVE);
     if (!loadedFromStorage) {
         #if defined(USE_NVRAM_PERSISTENCE) && USE_NVRAM_PERSISTENCE
         status = EfiSaveSpoofToNvram(uuid, systemSerial, biosSerial, baseboardSerial, baseboardModel, processorSerial);
         if (!EFI_ERROR(status)) {
-            Print(L"[NVRAM] Successfully saved to NVRAM\n");
-            Delay(500000);
+            AnimateProgress(L"Saving NVRAM profile", 350000);
         } else {
-            Print(L"[NVRAM] Failed to save (status: %r)\n", status);
-            Print(L"[NVRAM] Variable name: SmbiosSpoof\n");
-            Print(L"[NVRAM] GUID: 8BE4DF61-93CA-11D2-AA0D-00E098032B8C\n");
-            Print(L"[NVRAM] Try checking in RU.efi if variable exists\n");
-            Delay(500000);
+            PrintVerbose(L"[NVRAM] Failed to save (status: %r)\n", status);
+            PrintVerbose(L"[NVRAM] Variable name: SmbiosSpoof\n");
+            PrintVerbose(L"[NVRAM] GUID: 8BE4DF61-93CA-11D2-AA0D-00E098032B8C\n");
+            PrintVerbose(L"[NVRAM] Try checking in RU.efi if variable exists\n");
+            Delay(250000);
         }
         #endif
         
         #if defined(USE_DISK_PERSISTENCE) && USE_DISK_PERSISTENCE
         status = EfiSaveSpoofToDisk(uuid, systemSerial, biosSerial, baseboardSerial, baseboardModel, processorSerial);
         if (!EFI_ERROR(status)) {
-            Print(L"[DISK] Successfully saved to disk\n");
-            Delay(500000);
+            AnimateProgress(L"Saving disk profile", 350000);
         }
         #endif
     }
+    PrintStep(5, 6, L"Persist spoof profile", STEP_DONE);
+    Delay(250000);
     
-    Print(L"\n");
-    Print(L"========================================\n");
-    Print(L"  ORIGINAL VALUES\n");
-    Print(L"========================================\n");
-    Print(L"\n");
-    
-    Print(L"UUID: ");
-    PrintUUID(originalUUID);
-    Print(L"\n");
-    Delay(500000);
-    
-    if (originalSystemSerial[0] != 0) {
-        Print(L"System Serial: %s\n", originalSystemSerial);
-        Delay(500000);
-    }
-    
-    if (originalBaseboardSerial[0] != 0) {
-        Print(L"Baseboard Serial: %s\n", originalBaseboardSerial);
-        Delay(500000);
-    }
-    
-    if (originalBaseboardModel[0] != 0) {
-        Print(L"Baseboard Model: %s\n", originalBaseboardModel);
-        Delay(500000);
-    }
-    
-    if (originalProcessorSerial[0] != 0) {
-        Print(L"Processor Serial: %s\n", originalProcessorSerial);
-        Delay(500000);
-    }
-    
-    Print(L"\n");
-    Print(L"========================================\n");
-    Print(L"  SMBIOS SPOOF SUMMARY\n");
-    Print(L"========================================\n");
-    Print(L"\n");
-    
-    Print(L"UUID: ");
-    PrintUUID(uuid);
-    Print(L" %s\n", loadedFromStorage ? L"(loaded)" : L"(new)");
-    Delay(500000);
-    Print(L"\n");
-    
-    #if defined(SPOOF_SYSTEM_SERIAL) && SPOOF_SYSTEM_SERIAL
-    if (systemSerial[0] != 0) {
-        Print(L"System Serial: %s %s\n", systemSerial, loadedFromStorage ? L"(loaded)" : L"(new)");
-        Delay(500000);
-    }
-    #endif
-    
-    #if defined(SPOOF_BASEBOARD_SERIAL) && SPOOF_BASEBOARD_SERIAL
-    if (baseboardSerial[0] != 0) {
-        Print(L"Baseboard Serial: %s %s\n", baseboardSerial, loadedFromStorage ? L"(loaded)" : L"(new)");
-        Delay(500000);
-    }
-    #endif
-    
-    if (baseboardModel[0] != 0) {
-        Print(L"Baseboard Model: %s (static)\n", baseboardModel);
-        Delay(500000);
-    }
-    
-    if (processorSerial[0] != 0) {
-        Print(L"Processor Serial: %s %s\n", processorSerial, loadedFromStorage ? L"(loaded)" : L"(new)");
-        Delay(500000);
-    }
-    
-    Print(L"\n");
-    Print(L"========================================\n");
-    Print(L"\n");
+    PrintStep(6, 6, L"Render final summary", STEP_ACTIVE);
+    CHAR16 originalUuidText[40];
+    CHAR16 spoofedUuidText[40];
+    FormatUUIDToString(originalUUID, originalUuidText, sizeof(originalUuidText) / sizeof(CHAR16));
+    FormatUUIDToString(uuid, spoofedUuidText, sizeof(spoofedUuidText) / sizeof(CHAR16));
+
+    PrintSection(L"ORIGINAL VALUES");
+    PrintVerbose(L"UUID             : %s\n", originalUuidText);
+    PrintVerbose(L"System Serial    : %s\n", ValueOrDash(originalSystemSerial));
+    PrintVerbose(L"Baseboard Serial : %s\n", ValueOrDash(originalBaseboardSerial));
+    PrintVerbose(L"Baseboard Model  : %s\n", ValueOrDash(originalBaseboardModel));
+    PrintVerbose(L"Processor Serial : %s\n", ValueOrDash(originalProcessorSerial));
+    PrintSection(L"SMBIOS SPOOF SUMMARY");
+    PrintVerbose(L"UUID             : %s\n", spoofedUuidText);
+    PrintVerbose(L"System Serial    : %s\n", ValueOrDash(systemSerial));
+    PrintVerbose(L"Baseboard Serial : %s\n", ValueOrDash(baseboardSerial));
+    PrintVerbose(L"Baseboard Model  : %s\n", ValueOrDash(baseboardModel));
+    PrintVerbose(L"Processor Serial : %s\n", ValueOrDash(processorSerial));
+    PrintVerbose(L"\n");
+    Delay(250000);
+
     Print(L"All spoofs applied successfully!\n");
     Print(L"\n");
+    PrintFooterHints();
     Print(L"Press 'R' to reset and generate new values\n");
     Print(L"Press any other key to continue booting...\n");
     
@@ -342,7 +607,6 @@ UefiMain(
             gST->ConIn->ReadKeyStroke(gST->ConIn, &key);
             
             if (key.UnicodeChar == L'R' || key.UnicodeChar == L'r') {
-                Print(L"\n");
                 Print(L"[RESET] Generating new values...\n");
                 Print(L"\n");
                 
@@ -350,7 +614,11 @@ UefiMain(
                 EfiGenerateRandomSerialMatchingFormat(systemSerial, 64, originalSystemSerial);
                 biosSerial[0] = 0;
                 EfiGenerateRandomSerialMatchingFormat(baseboardSerial, 64, originalBaseboardSerial);
+                #if defined(SPOOF_PROCESSOR_SERIAL) && SPOOF_PROCESSOR_SERIAL
                 EfiGenerateRandomSerialMatchingFormat(processorSerial, 64, originalProcessorSerial);
+                #else
+                processorSerial[0] = 0;
+                #endif
                 
                 if (smbiosEntry != NULL) {
                     SMBIOS_STRUCTURE_POINTER_CUSTOM table = FindTableByType(smbiosEntry, SMBIOS_TYPE_BASEBOARD_INFORMATION, 0);
@@ -387,47 +655,18 @@ UefiMain(
                 }
                 #endif
                 
-                Print(L"\n");
-                Print(L"========================================\n");
-                Print(L"  NEW SMBIOS SPOOF SUMMARY\n");
-                Print(L"========================================\n");
-                Print(L"\n");
-                
-                Print(L"UUID: ");
-                PrintUUID(uuid);
-                Print(L" (new)\n");
-                Delay(500000);
-                Print(L"\n");
-                
-                #if defined(SPOOF_SYSTEM_SERIAL) && SPOOF_SYSTEM_SERIAL
-                if (systemSerial[0] != 0) {
-                    Print(L"System Serial: %s (new)\n", systemSerial);
-                    Delay(500000);
-                }
-                #endif
-                
-                #if defined(SPOOF_BASEBOARD_SERIAL) && SPOOF_BASEBOARD_SERIAL
-                if (baseboardSerial[0] != 0) {
-                    Print(L"Baseboard Serial: %s (new)\n", baseboardSerial);
-                    Delay(500000);
-                }
-                #endif
-                
-                if (baseboardModel[0] != 0) {
-                    Print(L"Baseboard Model: %s (static)\n", baseboardModel);
-                    Delay(500000);
-                }
-                
-                if (processorSerial[0] != 0) {
-                    Print(L"Processor Serial: %s (new)\n", processorSerial);
-                    Delay(500000);
-                }
-                
-                Print(L"\n");
-                Print(L"========================================\n");
-                Print(L"\n");
+                FormatUUIDToString(uuid, spoofedUuidText, sizeof(spoofedUuidText) / sizeof(CHAR16));
+                PrintVerbose(L"\n");
+                PrintSection(L"NEW SMBIOS SPOOF SUMMARY");
+                PrintVerbose(L"UUID             : %s  [new]\n", spoofedUuidText);
+                PrintVerbose(L"System Serial    : %s  [new]\n", ValueOrDash(systemSerial));
+                PrintVerbose(L"Baseboard Serial : %s  [new]\n", ValueOrDash(baseboardSerial));
+                PrintVerbose(L"Baseboard Model  : %s  [static]\n", ValueOrDash(baseboardModel));
+                PrintVerbose(L"Processor Serial : %s  [new]\n", ValueOrDash(processorSerial));
+
                 Print(L"New values generated and applied!\n");
                 Print(L"\n");
+                PrintFooterHints();
                 Print(L"Press 'R' to reset again\n");
                 Print(L"Press any other key to continue booting...\n");
             } else {
@@ -438,4 +677,3 @@ UefiMain(
     
     return EFI_SUCCESS;
 }
-

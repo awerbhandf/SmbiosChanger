@@ -58,28 +58,26 @@ GetNextHob(
 )
 {
     EFI_PEI_HOB_POINTERS hob;
+
+    if (start == NULL) {
+        return NULL;
+    }
+
     hob.Raw = (UINT8*)start;
 
     while (!END_OF_HOB_LIST(hob)) {
         if (hob.Header->HobType == type) {
             return hob.Raw;
         }
+
+        if (GET_HOB_LENGTH(hob) == 0) {
+            break;
+        }
+
         hob.Raw = GET_NEXT_HOB(hob);
     }
 
     return NULL;
-}
-
-/**
- * Get First HOB
- */
-static VOID*
-GetFirstHob(
-    IN UINT16 type
-)
-{
-    VOID* list = GetHobList();
-    return GetNextHob(type, list);
 }
 
 /**
@@ -92,6 +90,11 @@ GetNextGuidHob(
 )
 {
     EFI_PEI_HOB_POINTERS guidHob;
+
+    if (guid == NULL || start == NULL) {
+        return NULL;
+    }
+
     guidHob.Raw = (UINT8*)start;
 
     while ((guidHob.Raw = GetNextHob(EFI_HOB_TYPE_GUID_EXTENSION, guidHob.Raw)) != NULL) {
@@ -183,8 +186,8 @@ FindByHob(
 
     if (guidHob.Raw != NULL) {
         table = (EFI_PHYSICAL_ADDRESS*)GET_GUID_HOB_DATA(guidHob.Guid);
-        if (table != NULL) {
-            return (VOID*)table;
+        if (table != NULL && *table != 0) {
+            return (VOID*)(UINTN)(*table);
         }
     }
 
@@ -192,8 +195,8 @@ FindByHob(
 
     if (guidHob.Raw != NULL) {
         table = (EFI_PHYSICAL_ADDRESS*)GET_GUID_HOB_DATA(guidHob.Guid);
-        if (table != NULL) {
-            return (VOID*)table;
+        if (table != NULL && *table != 0) {
+            return (VOID*)(UINTN)(*table);
         }
     }
 
@@ -257,4 +260,3 @@ FindEntry(
 
     return NULL;
 }
-
