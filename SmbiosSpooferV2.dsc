@@ -25,4 +25,4 @@
   DevicePathLib|MdePkg/Library/UefiDevicePathLib/UefiDevicePathLib.inf
 
 [Components]
-  SmbiosChanger-main/src/SmbiosSpooferV2.inf
+  SmbiosChanger-main/SmbiosSpooferV2.inf

@@ -1,7 +1,7 @@
 # EFI SMBIOS Spoofer
 
 ToDo: 
-Make spoofer to work faster, can skip results clicking on some button.
+Make spoofer to work faster, can skip results clicking on some button. (done)
 
 This spoofer should work with all AMI motherboards. On laptops, spoofing may not always work. If you run into any issues, let me know!
 
@@ -36,7 +36,7 @@ This spoofer modifies SMBIOS (System Management BIOS) tables in memory during th
 
 ## Showcase
 
-![SMBIOS Spoofer in Action](images/spoof.jpg)
+![SMBIOS Spoofer in Action](images/spoof.png)
 
 *The spoofer running during UEFI boot phase, modifying hardware identifiers before Windows loads.*
 
@@ -215,31 +215,52 @@ The dual-persistence approach ensures values are maintained even if one method f
 
 ### Required Tools
 
-| Tool | Version | Installation | Verification |
-|------|---------|--------------|--------------|
-| **EDK2** | Latest stable | `git clone https://github.com/tianocore/edk2.git && cd edk2 && git submodule update --init --recursive` | Workspace: `C:\edk2` |
-| **Visual Studio 2022** | Community/Pro/Enterprise | Install with: Desktop C++, Windows SDK, MSVC v143 | `cl.exe` in PATH |
-| **Python 3** | 3.8+ | Download from python.org or Windows Store | `python --version` |
-| **NASM** (optional) | 2.15+ | Download from nasm.us, add to PATH | `nasm --version` |
+| Tool | Version | Installation |
+|------|---------|--------------|
+| **EDK2** | Latest stable | `git clone https://github.com/tianocore/edk2.git && cd edk2 && git submodule update --init --recursive` |
+| **Python 3** | 3.8+ | `python --version` |
+| **NASM** | 2.15+ | `nasm --version` |
+| **Compiler** | GCC or VS2022 | GCC on Linux, VS2022 on Windows |
 
-### Build Steps
+### Relative Build (Recommended)
+
+No absolute project paths are required. Keep this repo anywhere, set `WORKSPACE` to your `edk2` directory, then run the included script.
+
+#### Linux / Bash
 
 ```bash
-# 1. Setup EDK2
-git clone https://github.com/tianocore/edk2.git
-cd edk2
-git submodule update --init --recursive
-
-# 2. Copy project to EDK2 workspace
-cp -r SmbiosSpooferV2 C:\edk2\
-
-# 3. Build (Windows)
-build -a X64 -t VS2022 -p SmbiosSpooferV2/SmbiosSpooferV2.dsc -b RELEASE
-
-# Build output: Build/SmbiosSpooferV2/RELEASE_VS2022/X64/SmbiosSpooferV2.efi
+export WORKSPACE=/path/to/edk2
+cd /path/to/SmbiosChanger-main
+./scripts/build.sh
 ```
 
-**Note:** MdePkg libraries and UEFI protocols are automatically provided by EDK2.
+#### Linux / Fish
+
+```fish
+set -x WORKSPACE /path/to/edk2
+cd /path/to/SmbiosChanger-main
+./scripts/build.fish
+```
+
+#### Optional Arguments
+
+```bash
+# ./scripts/build.sh [ARCH] [TARGET] [TOOLCHAIN]
+./scripts/build.sh X64 DEBUG GCC
+```
+
+### Manual Build (if you prefer direct command)
+
+```bash
+export WORKSPACE=/path/to/edk2
+export EDK_TOOLS_PATH=$WORKSPACE/BaseTools
+export PACKAGES_PATH="$WORKSPACE:$(dirname "$(pwd)")"
+export PATH="$WORKSPACE/BaseTools/BinWrappers/PosixLike:$WORKSPACE/BaseTools/BinWrappers/Posix:$PATH"
+cd "$WORKSPACE"
+build -a X64 -b RELEASE -t GCC -p "$(basename "$OLDPWD")/SmbiosSpooferV2.dsc"
+```
+
+Build output: `Build/SmbiosSpooferV2/.../SmbiosSpooferV2.efi`
 
 ---
 

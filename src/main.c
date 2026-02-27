@@ -15,7 +15,7 @@
 
 static BOOLEAN g_SkipVerboseOutput = FALSE;
 #define UI_COLOR_DEFAULT EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK)
-#define UI_COLOR_HEADER EFI_TEXT_ATTR(EFI_LIGHTGREEN, EFI_LIGHTGRAY)
+#define UI_COLOR_HEADER EFI_TEXT_ATTR(EFI_LIGHTGREEN, EFI_BLUE)
 #define UI_COLOR_IMPORTANT EFI_TEXT_ATTR(EFI_YELLOW, EFI_BLACK)
 #define UI_COLOR_ACCENT EFI_TEXT_ATTR(EFI_CYAN, EFI_BLACK)
 #define UI_COOLDOWN_SCALE_NUM 2
@@ -76,7 +76,7 @@ PrintFooterHints(
 )
 {
     SetConsoleColor(UI_COLOR_HEADER);
-    Print(L" [S] Skip Details   [R] Regenerate Values   [Enter] Continue Boot ");
+    Print(L" [S] Skip Details  [R] Regenerate Values  [Enter] Continue Boot ");
     SetConsoleColor(UI_COLOR_DEFAULT);
     Print(L"\n");
 }
@@ -109,17 +109,17 @@ PrintBanner(
 )
 {
     SetConsoleColor(UI_COLOR_HEADER);
-    Print(L"                                                                \n");
-    Print(L"                        SMBIOS SPOOFER                          \n");
-    Print(L"                         V3 | ACROZI                            \n");
-    Print(L"                                                                \n");
+    Print(L"+--------------------------------------------------------------+\n");
+    Print(L"|                      EFI SMBIOS SPOOFER                      |\n");
+    Print(L"|                         V3  |  ACROZI                        |\n");
+    Print(L"+--------------------------------------------------------------+\n");
     SetConsoleColor(UI_COLOR_DEFAULT);
-    Print(L" Clean SMBIOS spoofing with persistence and fast reset flow.\n");
-    Print(L" Spoofer: EFI SMBIOS SPOOFER V3\n");
+    Print(L"  Clean SMBIOS spoofing with persistence and fast reset flow.\n");
+    Print(L"  Spoofer: EFI SMBIOS SPOOFER V3\n");
     SetConsoleColor(UI_COLOR_IMPORTANT);
-    Print(L" Give repo a star: github.com/Acrozi\n");
+    Print(L"  Give repo a star: github.com/Acrozi\n");
     SetConsoleColor(UI_COLOR_DEFAULT);
-    Print(L"---------------------------------------------------------------\n");
+    Print(L"+--------------------------------------------------------------+\n");
     PrintFooterHints();
 }
 
@@ -232,6 +232,19 @@ PrintSection(
         return;
     }
 
+    Print(L"\n");
+    SetConsoleColor(UI_COLOR_ACCENT);
+    Print(L"+======================================+\n");
+    Print(L"| %-36s |\n", Title);
+    Print(L"+======================================+\n");
+    SetConsoleColor(UI_COLOR_DEFAULT);
+}
+
+static VOID
+PrintSectionAlways(
+    IN CONST CHAR16* Title
+)
+{
     Print(L"\n");
     SetConsoleColor(UI_COLOR_ACCENT);
     Print(L"+======================================+\n");
@@ -577,19 +590,19 @@ UefiMain(
     FormatUUIDToString(originalUUID, originalUuidText, sizeof(originalUuidText) / sizeof(CHAR16));
     FormatUUIDToString(uuid, spoofedUuidText, sizeof(spoofedUuidText) / sizeof(CHAR16));
 
-    PrintSection(L"ORIGINAL VALUES");
-    PrintVerbose(L"UUID             : %s\n", originalUuidText);
-    PrintVerbose(L"System Serial    : %s\n", ValueOrDash(originalSystemSerial));
-    PrintVerbose(L"Baseboard Serial : %s\n", ValueOrDash(originalBaseboardSerial));
-    PrintVerbose(L"Baseboard Model  : %s\n", ValueOrDash(originalBaseboardModel));
-    PrintVerbose(L"Processor Serial : %s\n", ValueOrDash(originalProcessorSerial));
-    PrintSection(L"SMBIOS SPOOF SUMMARY");
-    PrintVerbose(L"UUID             : %s\n", spoofedUuidText);
-    PrintVerbose(L"System Serial    : %s\n", ValueOrDash(systemSerial));
-    PrintVerbose(L"Baseboard Serial : %s\n", ValueOrDash(baseboardSerial));
-    PrintVerbose(L"Baseboard Model  : %s\n", ValueOrDash(baseboardModel));
-    PrintVerbose(L"Processor Serial : %s\n", ValueOrDash(processorSerial));
-    PrintVerbose(L"\n");
+    PrintSectionAlways(L"ORIGINAL VALUES");
+    Print(L"UUID             : %s\n", originalUuidText);
+    Print(L"System Serial    : %s\n", ValueOrDash(originalSystemSerial));
+    Print(L"Baseboard Serial : %s\n", ValueOrDash(originalBaseboardSerial));
+    Print(L"Baseboard Model  : %s\n", ValueOrDash(originalBaseboardModel));
+    Print(L"Processor Serial : %s\n", ValueOrDash(originalProcessorSerial));
+    PrintSectionAlways(L"SMBIOS SPOOF SUMMARY");
+    Print(L"UUID             : %s\n", spoofedUuidText);
+    Print(L"System Serial    : %s\n", ValueOrDash(systemSerial));
+    Print(L"Baseboard Serial : %s\n", ValueOrDash(baseboardSerial));
+    Print(L"Baseboard Model  : %s\n", ValueOrDash(baseboardModel));
+    Print(L"Processor Serial : %s\n", ValueOrDash(processorSerial));
+    Print(L"\n");
     Delay(250000);
 
     Print(L"All spoofs applied successfully!\n");
@@ -656,13 +669,13 @@ UefiMain(
                 #endif
                 
                 FormatUUIDToString(uuid, spoofedUuidText, sizeof(spoofedUuidText) / sizeof(CHAR16));
-                PrintVerbose(L"\n");
-                PrintSection(L"NEW SMBIOS SPOOF SUMMARY");
-                PrintVerbose(L"UUID             : %s  [new]\n", spoofedUuidText);
-                PrintVerbose(L"System Serial    : %s  [new]\n", ValueOrDash(systemSerial));
-                PrintVerbose(L"Baseboard Serial : %s  [new]\n", ValueOrDash(baseboardSerial));
-                PrintVerbose(L"Baseboard Model  : %s  [static]\n", ValueOrDash(baseboardModel));
-                PrintVerbose(L"Processor Serial : %s  [new]\n", ValueOrDash(processorSerial));
+                Print(L"\n");
+                PrintSectionAlways(L"NEW SMBIOS SPOOF SUMMARY");
+                Print(L"UUID             : %s  [new]\n", spoofedUuidText);
+                Print(L"System Serial    : %s  [new]\n", ValueOrDash(systemSerial));
+                Print(L"Baseboard Serial : %s  [new]\n", ValueOrDash(baseboardSerial));
+                Print(L"Baseboard Model  : %s  [static]\n", ValueOrDash(baseboardModel));
+                Print(L"Processor Serial : %s  [new]\n", ValueOrDash(processorSerial));
 
                 Print(L"New values generated and applied!\n");
                 Print(L"\n");
