@@ -146,12 +146,12 @@ PatchType0(
 
     #if defined(SPOOF_BIOS_SERIAL) && SPOOF_BIOS_SERIAL
     if (g_BiosSerial[0] != 0) {
-        EditCustomString(table, &table.Type0->SerialNumber, g_BiosSerial);
+        EditCustomString(table, &table.Type0->BiosSerialNumber, g_BiosSerial);
     } else {
-        EditRandom(table, &table.Type0->SerialNumber);
+        EditRandom(table, &table.Type0->BiosSerialNumber);
     }
     #else
-    EditRandom(table, &table.Type0->SerialNumber);
+    EditRandom(table, &table.Type0->BiosSerialNumber);
     #endif
 
     PrintLog(L"[OK] Type 0 (BIOS) patched successfully\n");
