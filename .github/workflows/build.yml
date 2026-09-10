@@ -1,0 +1,24 @@
+name: Build SmbiosSpoofer
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup EDK2
+      run: |
+        git clone --depth 1 https://github.com/tianocore/edk2.git
+        cd edk2
+        git submodule update --init --recursive
+        make -C BaseTools
+    - name: Build
+      run: |
+        export WORKSPACE=$GITHUB_WORKSPACE/edk2
+        export PACKAGES_PATH=$WORKSPACE:$GITHUB_WORKSPACE
+        cd $WORKSPACE
+        build -a X64 -b RELEASE -t GCC -p SmbiosChanger/SmbiosSpooferV2.dsc
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: SmbiosSpooferV4
+        path: Build/SmbiosSpooferV2/**/*.efi
