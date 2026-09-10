@@ -687,6 +687,49 @@ UefiMain(
             }
         }
     }
+        // Auto-boot Windows Boot Manager
+    Print(L"\n");
+    Print(L"[BOOT] Starting Windows Boot Manager...\n");
+    Delay(1000000);
     
+    EFI_HANDLE* handles = NULL;
+    UINTN handleCount = 0;
+    EFI_DEVICE_PATH_PROTOCOL* devicePath = NULL;
+    EFI_HANDLE bootManagerHandle = NULL;
+    
+    // Find all LoadFile protocol handles
+    status = gBS->LocateHandleBuffer(ByProtocol, &gEfiLoadFileProtocolGuid, NULL, &handleCount, &handles);
+    if (!EFI_ERROR(status) && handles != NULL) {
+        // Try to find Windows Boot Manager
+        for (UINTN i = 0; i < handleCount; i++) {
+            CHAR16* devicePathText = ConvertDevicePathToText(DevicePathFromHandle(handles[i]), FALSE, FALSE);
+            if (devicePathText != NULL) {
+                if (StrStr(devicePathText, L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi") != NULL) {
+                    bootManagerHandle = handles[i];
+                    gBS->FreePool(devicePathText);
+                    break;
+                }
+                gBS->FreePool(devicePathText);
+            }
+        }
+        
+        if (bootManagerHandle != NULL) {
+            // Load and start Windows Boot Manager
+            EFI_HANDLE loadedImageHandle = NULL;
+            status = gBS->LoadImage(FALSE, ImageHandle, DevicePathFromHandle(bootManagerHandle), NULL, 0, &loadedImageHandle);
+            if (!EFI_ERROR(status)) {
+                gBS->FreePool(handles);
+                gBS->StartImage(loadedImageHandle, NULL, NULL);
+                // Should not reach here
+                return EFI_SUCCESS;
+            }
+        }
+        
+        gBS->FreePool(handles);
+    }
+    
+    // Fallback: try to boot from default boot option
+    Print(L"[WARN] Windows Boot Manager not found, trying default boot...\n");
+    Delay(1000000);
     return EFI_SUCCESS;
 }
