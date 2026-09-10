@@ -489,8 +489,8 @@ UefiMain(
         }
         
         SMBIOS_STRUCTURE_POINTER_CUSTOM table0 = FindTableByType(smbiosEntry, SMBIOS_TYPE_BIOS_INFORMATION, 0);
-        if (table0.Raw != NULL && table0.Type0 != NULL && table0.Type0->SerialNumber != 0) {
-            ReadSmbiosString(table0, table0.Type0->SerialNumber, originalBiosSerial, 64);
+        if (table0.Raw != NULL && table0.Type0 != NULL && table0.Type0->BiosSerialNumber != 0) {
+            ReadSmbiosString(table0, table0.Type0->BiosSerialNumber, originalBiosSerial, 64);
         } else {
             originalBiosSerial[0] = 0;
         }
