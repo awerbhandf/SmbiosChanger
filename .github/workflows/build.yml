@@ -24,8 +24,11 @@ jobs:
         export PATH=$WORKSPACE/BaseTools/BinWrappers/PosixLike:$PATH
         cd $WORKSPACE
         build -a X64 -b RELEASE -t GCC -p SmbiosSpooferV2.dsc
+    - name: Rename to V3
+      run: |
+        cp edk2/Build/SmbiosSpooferV2/RELEASE_GCC/X64/SmbiosSpooferV2.efi SmbiosSpooferV3.efi
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: SmbiosSpooferV4
-        path: edk2/Build/SmbiosSpooferV2/RELEASE_GCC/X64/SmbiosSpooferV2.efi
+        name: SmbiosSpooferV3
+        path: SmbiosSpooferV3.efi
