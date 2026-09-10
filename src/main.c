@@ -690,13 +690,10 @@ UefiMain(
             }
         }
     }
-    // Auto-boot Windows Boot Manager
+    // Auto-boot prompt
     Print(L"\n");
-    Print(L"[BOOT] Starting Windows Boot Manager...\n");
-    Delay(1000000);
-    
-    // Simple fallback - just exit and let BIOS handle boot
-    Print(L"[INFO] Spoofer completed. Press any key to exit to BIOS boot menu...\n");
+    Print(L"[BOOT] Spoofer completed successfully!\n");
+    Print(L"[BOOT] Press any key to exit to BIOS boot menu and select Windows...\n");
     WaitForEnterKey();
     
     return EFI_SUCCESS;
