@@ -14,7 +14,7 @@
 
 3. **Easy Customization**: Simply edit `src/Config.h` to enable/disable specific features, then push your changes. GitHub Actions will automatically compile a fresh `.efi` file with your custom settings.
 
-4. **Ready-to-Use Artifacts**: Compiled `.efi` files are available in the GitHub Actions Artifacts section. Go to the "Actions" tab, select the latest workflow run, and download the `SmbiosSpooferV3.zip` artifact containing the compiled file.
+4. **Ready-to-Use Artifacts**: Compiled `.efi` files are available in the GitHub Actions Artifacts section. To download: go to the "Actions" tab at the top of the repository, click on the latest workflow run (usually named "Build SmbiosSpoofer"), scroll down to the "Artifacts" section at the bottom, and click on `SmbiosSpooferV3.zip` to download the compiled file.
 
 5. **Build Error Explained**: During the build process, you may see a harmless error: `cp: cannot stat '*.pdb': No such file or directory`. This error is automatically ignored and does not affect the final `.efi` file. The `.pdb` files are debug symbols that are not required for the spoofer to function. The build completes successfully despite this minor issue.
 
@@ -30,7 +30,7 @@
 
 3. **Легкая настройка**: Просто отредактируйте `src/Config.h` для включения/отключения конкретных функций, затем отправьте изменения. GitHub Actions автоматически скомпилирует новый `.efi` файл с вашими настройками.
 
-4. **Готовые к использованию артефакты**: Скомпилированные `.efi` файлы доступны в разделе GitHub Actions Artifacts. Перейдите на вкладку "Actions", выберите последний запуск workflow и скачайте артефакт `SmbiosSpooferV3.zip`, содержащий скомпилированный файл.
+4. **Готовые к использованию артефакты**: Скомпилированные `.efi` файлы доступны в разделе GitHub Actions Artifacts. Для скачивания: перейдите на вкладку "Actions" вверху репозитория, нажмите на последний запуск workflow (обычно называется "Build SmbiosSpoofer"), прокрутите вниз до раздела "Artifacts" и нажмите на `SmbiosSpooferV3.zip` для скачивания скомпилированного файла.
 
 5. **Объяснение ошибки сборки**: В процессе сборки вы можете увидеть безобидную ошибку: `cp: cannot stat '*.pdb': No such file or directory`. Эта ошибка автоматически игнорируется и не влияет на итоговый `.efi` файл. Файлы `.pdb` - это символы отладки, которые не требуются для работы спуфера. Сборка завершается успешно несмотря на эту незначительную проблему.
 
@@ -46,7 +46,7 @@
 
 3. **轻松自定义**：只需编辑 `src/Config.h` 来启用/禁用特定功能，然后推送更改。GitHub Actions 将自动使用您的自定义设置编译新的 `.efi` 文件。
 
-4. **现成的构建产物**：编译的 `.efi` 文件可在 GitHub Actions Artifacts 部分获取。转到 "Actions" 选项卡，选择最新的工作流运行，并下载包含编译文件的 `SmbiosSpooferV3.zip` 构建产物。
+4. **现成的构建产物**：编译的 `.efi` 文件可在 GitHub Actions Artifacts 部分获取。要下载：转到仓库顶部的 "Actions" 选项卡，点击最新的工作流运行（通常名为 "Build SmbiosSpoofer"），向下滚动到底部的 "Artifacts" 部分，然后点击 `SmbiosSpooferV3.zip` 下载编译的文件。
 
 5. **构建错误说明**：在构建过程中，您可能会看到一个无害的错误：`cp: cannot stat '*.pdb': No such file or directory`。此错误会自动忽略，不会影响最终的 `.efi` 文件。`.pdb` 文件是调试符号，欺骗器运行不需要它们。尽管存在这个小问题，构建仍会成功完成。
 
