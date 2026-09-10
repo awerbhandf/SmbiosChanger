@@ -28,4 +28,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: SmbiosSpooferV4
-        path: Build/SmbiosSpooferV2/**/*.efi
+        path: edk2/Build/SmbiosSpooferV2/RELEASE_GCC/X64/SmbiosSpooferV2.efi
