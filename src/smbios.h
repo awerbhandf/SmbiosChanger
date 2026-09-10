@@ -46,8 +46,14 @@ typedef struct {
     UINT8          Vendor;           // String index
     UINT8          BiosVersion;       // String index
     UINT16         BiosStartingAddressSegment;
-    UINT8          BiosReleaseDate;  // String index (we use this for BIOS Serial)
+    UINT8          BiosReleaseDate;  // String index
     UINT8          BiosRomSize;
+    UINT8          BiosCharacteristics;
+    UINT8          BiosCharacteristicsExt1;
+    UINT8          BiosCharacteristicsExt2;
+    UINT8          BiosRelease;       // String index
+    UINT8          FirmwareRevision;  // String index
+    UINT8          BiosSerialNumber;  // String index (SMBIOS 2.4+)
     // ... more fields
 } SMBIOS_TYPE0_BIOS_INFO;
 
