@@ -9,10 +9,7 @@
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/PrintLib.h>
-#include <Library/DevicePathLib.h>
-#include <Library/UefiBootManagerLib.h>
 #include <Protocol/Smbios.h>
-#include <Protocol/LoadFile.h>
 #include "smbios.h"
 #include "Config.h"
 
@@ -491,7 +488,12 @@ UefiMain(
             }
         }
         
-        originalBiosSerial[0] = 0;
+        SMBIOS_STRUCTURE_POINTER_CUSTOM table0 = FindTableByType(smbiosEntry, SMBIOS_TYPE_BIOS_INFORMATION, 0);
+        if (table0.Raw != NULL && table0.Type0 != NULL && table0.Type0->SerialNumber != 0) {
+            ReadSmbiosString(table0, table0.Type0->SerialNumber, originalBiosSerial, 64);
+        } else {
+            originalBiosSerial[0] = 0;
+        }
         
         SMBIOS_STRUCTURE_POINTER_CUSTOM table2 = FindTableByType(smbiosEntry, SMBIOS_TYPE_BASEBOARD_INFORMATION, 0);
         if (table2.Raw != NULL && table2.Type2 != NULL) {
@@ -517,7 +519,11 @@ UefiMain(
         EfiGenerateRandomUUID(uuid);
         
         EfiGenerateRandomSerialMatchingFormat(systemSerial, 64, originalSystemSerial);
+        #if defined(SPOOF_BIOS_SERIAL) && SPOOF_BIOS_SERIAL
+        EfiGenerateRandomSerialMatchingFormat(biosSerial, 64, originalBiosSerial);
+        #else
         biosSerial[0] = 0;
+        #endif
         EfiGenerateRandomSerialMatchingFormat(baseboardSerial, 64, originalBaseboardSerial);
         #if defined(SPOOF_PROCESSOR_SERIAL) && SPOOF_PROCESSOR_SERIAL
         EfiGenerateRandomSerialMatchingFormat(processorSerial, 64, originalProcessorSerial);
@@ -527,7 +533,11 @@ UefiMain(
         
         baseboardModel[0] = 0;
     } else {
+        #if defined(SPOOF_BIOS_SERIAL) && SPOOF_BIOS_SERIAL
+        // Keep loaded BIOS serial from storage
+        #else
         biosSerial[0] = 0;
+        #endif
     }
     PrintStep(3, 6, L"Prepare spoof values", STEP_DONE);
     Delay(300000);
@@ -628,7 +638,11 @@ UefiMain(
                 
                 EfiGenerateRandomUUID(uuid);
                 EfiGenerateRandomSerialMatchingFormat(systemSerial, 64, originalSystemSerial);
+                #if defined(SPOOF_BIOS_SERIAL) && SPOOF_BIOS_SERIAL
+                EfiGenerateRandomSerialMatchingFormat(biosSerial, 64, originalBiosSerial);
+                #else
                 biosSerial[0] = 0;
+                #endif
                 EfiGenerateRandomSerialMatchingFormat(baseboardSerial, 64, originalBaseboardSerial);
                 #if defined(SPOOF_PROCESSOR_SERIAL) && SPOOF_PROCESSOR_SERIAL
                 EfiGenerateRandomSerialMatchingFormat(processorSerial, 64, originalProcessorSerial);
