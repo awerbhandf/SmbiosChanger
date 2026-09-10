@@ -15,6 +15,7 @@ jobs:
         cd edk2
         git submodule update --init --recursive
         make -C BaseTools
+        source edksetup.sh
     - name: Build
       run: |
         export WORKSPACE=$GITHUB_WORKSPACE/edk2
