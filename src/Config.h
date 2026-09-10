@@ -19,9 +19,9 @@
 #define UUID_FILE_PATH          L"\\EFI\\SmbiosSpoofer\\uuid.dat"
 
 #define SPOOF_SYSTEM_SERIAL     1
-#define SPOOF_BIOS_SERIAL       0
+#define SPOOF_BIOS_SERIAL       1
 #define SPOOF_BASEBOARD_SERIAL  1
-#define SPOOF_BASEBOARD_MODEL   0
+#define SPOOF_BASEBOARD_MODEL   1
 #define SPOOF_PROCESSOR_SERIAL  1
 
 #endif
