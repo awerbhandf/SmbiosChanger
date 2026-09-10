@@ -1,5 +1,57 @@
 # EFI SMBIOS Spoofer
 
+---
+
+## 🚀 Fork Differences
+
+### English
+
+**This fork differs from the original repository in the following ways:**
+
+1. **All Spoofing Options Enabled by Default**: Unlike the original where some options are disabled (SPOOF_BIOS_SERIAL and SPOOF_BASEBOARD_MODEL set to 0), this fork has ALL spoofing options enabled (set to 1) by default in `src/Config.h`. This provides maximum spoofing coverage out of the box.
+
+2. **Automated GitHub Actions Build**: No need to install EDK2, Python, NASM, or compilers on your local machine. This fork includes a GitHub Actions workflow that automatically builds the `.efi` file whenever you push changes to the repository.
+
+3. **Easy Customization**: Simply edit `src/Config.h` to enable/disable specific features, then push your changes. GitHub Actions will automatically compile a fresh `.efi` file with your custom settings.
+
+4. **Ready-to-Use Artifacts**: Compiled `.efi` files are available in the GitHub Actions Artifacts section. Go to the "Actions" tab, select the latest workflow run, and download the `SmbiosSpooferV3.zip` artifact containing the compiled file.
+
+5. **Build Error Explained**: During the build process, you may see a harmless error: `cp: cannot stat '*.pdb': No such file or directory`. This error is automatically ignored and does not affect the final `.efi` file. The `.pdb` files are debug symbols that are not required for the spoofer to function. The build completes successfully despite this minor issue.
+
+---
+
+### Русский
+
+**Этот форк отличается от оригинального репозитория следующими особенностями:**
+
+1. **Все опции спуфинга включены по умолчанию**: В отличие от оригинала, где некоторые опции отключены (SPOOF_BIOS_SERIAL и SPOOF_BASEBOARD_MODEL установлены в 0), в этом форке ВСЕ опции спуфинга включены (установлены в 1) по умолчанию в файле `src/Config.h`. Это обеспечивает максимальное покрытие спуфинга сразу после использования.
+
+2. **Автоматическая сборка через GitHub Actions**: Не нужно устанавливать EDK2, Python, NASM или компиляторы на локальный компьютер. Этот форк включает workflow GitHub Actions, который автоматически собирает `.efi` файл при каждом изменении в репозитории.
+
+3. **Легкая настройка**: Просто отредактируйте `src/Config.h` для включения/отключения конкретных функций, затем отправьте изменения. GitHub Actions автоматически скомпилирует новый `.efi` файл с вашими настройками.
+
+4. **Готовые к использованию артефакты**: Скомпилированные `.efi` файлы доступны в разделе GitHub Actions Artifacts. Перейдите на вкладку "Actions", выберите последний запуск workflow и скачайте артефакт `SmbiosSpooferV3.zip`, содержащий скомпилированный файл.
+
+5. **Объяснение ошибки сборки**: В процессе сборки вы можете увидеть безобидную ошибку: `cp: cannot stat '*.pdb': No such file or directory`. Эта ошибка автоматически игнорируется и не влияет на итоговый `.efi` файл. Файлы `.pdb` - это символы отладки, которые не требуются для работы спуфера. Сборка завершается успешно несмотря на эту незначительную проблему.
+
+---
+
+### 中文
+
+**此分支与原始仓库的区别如下：**
+
+1. **默认启用所有欺骗选项**：与原始版本不同（其中某些选项被禁用，SPOOF_BIOS_SERIAL 和 SPOOF_BASEBOARD_MODEL 设置为 0），此分支默认启用所有欺骗选项（在 `src/Config.h` 中设置为 1）。这提供了开箱即用的最大欺骗覆盖范围。
+
+2. **GitHub Actions 自动构建**：无需在本地计算机上安装 EDK2、Python、NASM 或编译器。此分支包含 GitHub Actions 工作流，每当您向仓库推送更改时，它会自动构建 `.efi` 文件。
+
+3. **轻松自定义**：只需编辑 `src/Config.h` 来启用/禁用特定功能，然后推送更改。GitHub Actions 将自动使用您的自定义设置编译新的 `.efi` 文件。
+
+4. **现成的构建产物**：编译的 `.efi` 文件可在 GitHub Actions Artifacts 部分获取。转到 "Actions" 选项卡，选择最新的工作流运行，并下载包含编译文件的 `SmbiosSpooferV3.zip` 构建产物。
+
+5. **构建错误说明**：在构建过程中，您可能会看到一个无害的错误：`cp: cannot stat '*.pdb': No such file or directory`。此错误会自动忽略，不会影响最终的 `.efi` 文件。`.pdb` 文件是调试符号，欺骗器运行不需要它们。尽管存在这个小问题，构建仍会成功完成。
+
+---
+
 ToDo: 
 Make spoofer to work faster, can skip results clicking on some button. (done)
 
